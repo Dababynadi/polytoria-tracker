@@ -8,24 +8,17 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-async function initDb() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS item_prices (
-                id SERIAL PRIMARY KEY,
-                item_id INT,
-                name TEXT,
-                price INT,
-                rap INT,
-                recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        console.log("Database table is ready.");
-    } catch (err) {
-        console.error("Database init error:", err);
-    }
-}
-initDb();
+// Create table if missing
+pool.query(`
+    CREATE TABLE IF NOT EXISTS item_prices (
+        id SERIAL PRIMARY KEY,
+        item_id INT,
+        name TEXT,
+        price INT,
+        rap INT,
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+`).catch(err => console.error("DB Error:", err));
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -42,20 +35,20 @@ app.get('/api/prices', async (req, res) => {
     }
 });
 
-// Manual Sync UI
+// This is the page that was blank - simplified version:
 app.get('/internal/update', (req, res) => {
     res.send(`
+        <!DOCTYPE html>
         <html>
-        <body style="font-family:sans-serif; padding:20px; background:#f0f2f5; text-align:center;">
-            <div style="max-width:500px; margin:auto; background:white; padding:30px; border-radius:15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h2 style="color:#333;">Market Manual Sync</h2>
-                <p>1. <a href="https://api.polytoria.com/v1/store/items?isLimited=true" target="_blank" style="color:#007bff; font-weight:bold;">Tap here to open data</a></p>
-                <p style="font-size:0.9em; color:#666;">If the page looks like a normal website, it <b>WONT</b> work. It must look like messy text starting with {"success":true...</p>
-                <form action="/internal/save" method="POST">
-                    <textarea name="data" rows="8" placeholder="Paste messy text here..." style="width:100%; padding:10px; border-radius:5px; border:1px solid #ccc;"></textarea><br><br>
-                    <button type="submit" style="width:100%; padding:15px; background:#28a745; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer;">Update Database</button>
-                </form>
-            </div>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family:sans-serif; padding:20px;">
+            <h2>Manual Sync Page</h2>
+            <p>1. <a href="https://api.polytoria.com/v1/store/items?isLimited=true" target="_blank">Click here for data</a></p>
+            <p>2. Copy the text from that page and paste it below:</p>
+            <form action="/internal/save" method="POST">
+                <textarea name="data" rows="10" style="width:100%;" placeholder='{"success":true...}'></textarea><br><br>
+                <button type="submit" style="padding:15px; background:green; color:white; width:100%;">Save to Database</button>
+            </form>
         </body>
         </html>
     `);
@@ -63,22 +56,17 @@ app.get('/internal/update', (req, res) => {
 
 app.post('/internal/save', async (req, res) => {
     try {
-        if (!req.body.data.trim().startsWith('{')) {
-            return res.status(400).send("<b>Error:</b> That looks like HTML or an error page. Make sure you copy the RAW messy text from the link.");
-        }
-        
         const rawData = JSON.parse(req.body.data);
         const items = rawData.items || [];
-        
         for (let item of items) {
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, rap) VALUES ($1, $2, $3, $4)',
                 [item.id, item.name, item.price, item.rap]
             );
         }
-        res.send(`Successfully saved ${items.length} items! <a href="/">Return Home</a>`);
+        res.send(`Successfully saved ${items.length} items! <a href="/">Go Home</a>`);
     } catch (err) {
-        res.status(500).send("<b>Sync Error:</b> Make sure you copied the entire page. Error: " + err.message);
+        res.send("Error: " + err.message);
     }
 });
 
