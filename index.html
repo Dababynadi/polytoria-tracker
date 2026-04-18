@@ -1,43 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Market Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polytoria Market Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; background: #0b0b0b; color: white; text-align: center; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px; }
-        .card { background: #161616; padding: 15px; border-radius: 10px; border: 1px solid #333; text-decoration: none; color: white; }
-        .card:hover { border-color: #007bff; }
-        .filter-btn { padding: 10px 20px; margin: 10px; cursor: pointer; }
-        .active { background: #007bff; color: white; }
+        body { font-family: 'Inter', sans-serif; background: #0d0d0d; color: #efefef; margin: 0; padding: 0; }
+        
+        /* Modern Header */
+        .navbar { background: #141414; padding: 20px 40px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 20px; font-weight: 800; letter-spacing: -1px; }
+        .logo span { color: #007bff; }
+
+        .hero { padding: 80px 20px; text-align: center; background: radial-gradient(circle at center, #1a1a1a 0%, #0d0d0d 100%); }
+        .hero h1 { font-size: 48px; font-weight: 800; margin: 0; letter-spacing: -2px; }
+        .hero p { color: #666; font-size: 18px; margin-top: 10px; }
+
+        /* Modern Tabs */
+        .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 40px; }
+        .tab-btn { background: #141414; border: 1px solid #222; color: #888; padding: 12px 30px; border-radius: 30px; cursor: pointer; font-weight: 700; transition: 0.2s; }
+        .tab-btn.active { background: #fff; color: #000; border-color: #fff; }
+        .tab-btn:hover:not(.active) { border-color: #555; color: #fff; }
+
+        .container { max-width: 1200px; margin: 0 auto 100px auto; padding: 0 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 25px; }
+        
+        /* Modern Cards */
+        .card { 
+            background: #141414; padding: 25px; border-radius: 20px; border: 1px solid #222; 
+            text-align: center; text-decoration: none; color: inherit; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .card:hover { border-color: #007bff; transform: translateY(-8px); background: #1a1a1a; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+        .card img { width: 160px; height: 160px; object-fit: contain; margin-bottom: 20px; background: #0d0d0d; border-radius: 12px; padding: 10px; }
+        
+        .name { font-weight: 700; font-size: 17px; margin-bottom: 10px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .price { color: #2ecc71; font-weight: 800; font-size: 19px; }
+        .rap { font-size: 11px; color: #555; margin-top: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .badge { display: inline-block; background: #f1c40f; color: #000; font-size: 9px; font-weight: 900; padding: 4px 10px; border-radius: 20px; margin-bottom: 10px; text-transform: uppercase; }
     </style>
 </head>
 <body>
-    <h1>Market Tracker</h1>
-    <div>
-        <button id="btnAll" class="active" onclick="load('all')">All</button>
-        <button id="btnLim" onclick="load('limited')">Limiteds</button>
+
+    <div class="navbar">
+        <div class="logo">POLYTORY<span>ANALYTICS</span></div>
+        <div style="font-size: 12px; color: #444;">ID #0968-V3</div>
     </div>
-    <div class="grid" id="grid"></div>
+
+    <div class="hero">
+        <h1>Market Intelligence</h1>
+        <p>The definitive source for item values and collectibles.</p>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" id="btn-all" onclick="load('all')">Everything</button>
+            <button class="tab-btn" id="btn-lim" onclick="load('limited')">Limiteds</button>
+        </div>
+        <div class="grid" id="market-grid"></div>
+    </div>
 
     <script>
-        async function load(mode) {
-            document.getElementById('btnAll').className = mode === 'all' ? 'active' : '';
-            document.getElementById('btnLim').className = mode === 'limited' ? 'active' : '';
-            
-            const res = await fetch(mode === 'limited' ? '/api/prices?limited=true' : '/api/prices');
-            const data = await res.json();
-            const grid = document.getElementById('grid');
-            
-            if (data.length === 0) {
-                grid.innerHTML = "<p>No data. Sync at /internal/update</p>";
-                return;
-            }
+        async function load(type) {
+            document.getElementById('btn-all').classList.toggle('active', type === 'all');
+            document.getElementById('btn-lim').classList.toggle('active', type === 'limited');
 
-            grid.innerHTML = data.map(i => `
-                <a href="/store/${i.item_id}" class="card">
-                    <img src="${i.thumbnail}" width="100">
-                    <div>${i.name}</div>
-                    <div style="color:#2ecc71">${i.price} Bricks</div>
+            const url = type === 'limited' ? '/api/prices?limited=true' : '/api/prices';
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            document.getElementById('market-grid').innerHTML = data.map(item => `
+                <a href="/store/${item.item_id}" class="card">
+                    ${item.is_limited ? '<span class="badge">Limited</span>' : '<span class="badge" style="background:#222;color:#555">Standard</span>'}
+                    <img src="${item.thumbnail}">
+                    <div class="name">${item.name}</div>
+                    <div class="price">${item.price.toLocaleString()}</div>
+                    <div class="rap">RAP: ${item.rap.toLocaleString()}</div>
+                    <div style="font-size:10px; color:#333; margin-top:10px;">ID: #${item.item_id}</div>
                 </a>
             `).join('');
         }
