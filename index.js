@@ -1,4 +1,4 @@
- const express = require('express');
+const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 const app = express();
@@ -8,7 +8,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Database Setup
+// Minimalist Database Setup - This prevents the 'Status 1' crash
 async function initDb() {
     try {
         await pool.query(`
@@ -22,12 +22,100 @@ async function initDb() {
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Ensure thumbnail column exists for older databases
-        await pool.query(`ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS thumbnail TEXT;`).catch(() => {});
-        console.log("Database initialized successfully.");
+        console.log("Database Ready");
     } catch (err) {
-        console.error("Database error:", err);
+        console.error("DB Init Warning:", err.message);
     }
+}
+initDb();
+
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// --- ROUTES ---
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Item Page Route (Polytoria.trade Style)
+app.get('/store/:id', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM item_prices WHERE item_id = $1 ORDER BY recorded_at DESC LIMIT 1', [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).send("Item not found. Please sync data first.");
+        const item = result.rows[0];
+
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                    .container { background: white; max-width: 800px; width: 100%; border-radius: 15px; padding: 30px; display: flex; flex-wrap: wrap; gap: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+                    .img-side { flex: 1; min-width: 250px; background: #f8f9fa; border-radius: 10px; padding: 20px; text-align: center; }
+                    .img-side img { width: 100%; border-radius: 5px; }
+                    .info-side { flex: 1.5; min-width: 250px; }
+                    .price-tag { background: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #28a745; margin: 20px 0; }
+                    .btn { display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 15px; border-radius: 8px; font-weight: bold; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="img-side"><img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'"></div>
+                    <div class="info-side">
+                        <h1>${item.name}</h1>
+                        <div class="price-tag">
+                            <div style="font-size: 12px; color: #666;">VALUE</div>
+                            <div style="font-size: 24px; font-weight: bold; color: #28a745;">${item.price.toLocaleString()} Bricks</div>
+                        </div>
+                        <p><b>RAP:</b> ${item.rap.toLocaleString()}</p>
+                        <p><b>ID:</b> #${item.item_id}</p>
+                        <a href="https://polytoria.com/store/${item.item_id}" class="btn">View on Polytoria</a>
+                        <br><a href="/" style="color: #666; text-decoration: none; font-size: 14px;">← Back</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (err) { res.status(500).send("Error: " + err.message); }
+});
+
+app.get('/api/prices', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT DISTINCT ON (item_id) * FROM item_prices ORDER BY item_id, recorded_at DESC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/internal/update', (req, res) => {
+    res.send(`
+        <html><body style="font-family:sans-serif; text-align:center; padding:50px;">
+            <h2>Sync Market Data</h2>
+            <form action="/internal/save" method="POST">
+                <textarea name="data" rows="10" style="width:100%; max-width:500px;"></textarea><br>
+                <button type="submit" style="margin-top:10px; padding:15px 40px; background:green; color:white; border:none; border-radius:5px;">UPDATE</button>
+            </form>
+        </body></html>
+    `);
+});
+
+app.post('/internal/save', async (req, res) => {
+    try {
+        const rawData = JSON.parse(req.body.data);
+        const items = rawData.items || rawData.assets || rawData.data || (Array.isArray(rawData) ? rawData : []);
+        for (let item of items) {
+            const itemId = item.id || item.assetId || 0;
+            const thumb = item.thumbnail || \`https://c0.ptacdn.com/thumbnails/assets/\${itemId}-icon.png\`;
+            await pool.query(
+                'INSERT INTO item_prices (item_id, name, price, rap, thumbnail) VALUES ($1, $2, $3, $4, $5)',
+                [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb]
+            );
+        }
+        res.send("Successfully Updated! <a href='/'>Go Home</a>");
+    } catch (err) { res.status(500).send("Error: " + err.message); }
+});
+
+app.listen(process.env.PORT || 3000);
 }
 initDb();
 
