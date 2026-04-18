@@ -44,7 +44,13 @@ app.get('/api/prices', async (req, res) => {
 
 app.get('/internal/update', async (req, res) => {
     try {
-        const response = await axios.get('https://api.polytoria.com/v1/store/items?isLimited=true');
+        // We add the User-Agent here to stop Polytoria from blocking us (403 error)
+        const response = await axios.get('https://api.polytoria.com/v1/store/items?isLimited=true', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+        
         const items = response.data.items;
         for (let item of items) {
             await pool.query(
