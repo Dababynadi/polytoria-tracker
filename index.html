@@ -3,39 +3,45 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Polytoria Archive</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background: #0d0d0d; color: #efefef; margin: 0; padding: 0; }
-        .navbar { background: #141414; padding: 25px 40px; border-bottom: 1px solid #222; text-align: center; }
-        .logo { font-size: 20px; font-weight: 800; letter-spacing: -1px; }
+        
+        /* Announcement Banner */
+        .announcement-banner { background: #007bff; color: white; padding: 12px; text-align: center; font-weight: bold; font-size: 14px; display: none; }
+
+        .navbar { background: #141414; padding: 25px; border-bottom: 1px solid #222; text-align: center; }
+        .logo { font-size: 20px; font-weight: 800; }
         .logo span { color: #007bff; }
 
-        .search-container { max-width: 600px; margin: 40px auto; padding: 0 20px; }
-        #search-input { width: 100%; padding: 18px 25px; border-radius: 12px; border: 1px solid #222; background: #141414; color: white; font-size: 16px; outline: none; transition: 0.3s; }
-        #search-input:focus { border-color: #007bff; box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.1); }
+        .search-container { max-width: 600px; margin: 30px auto; padding: 0 20px; }
+        #search-input { width: 100%; padding: 18px; border-radius: 12px; border: 1px solid #222; background: #141414; color: white; font-size: 16px; outline: none; box-sizing: border-box; }
 
         .container { max-width: 1200px; margin: auto; padding: 0 20px 100px 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
         
         .card { 
             background: #141414; border: 1px solid #222; border-radius: 16px; padding: 20px; 
-            text-align: center; text-decoration: none; color: inherit; transition: 0.2s;
+            text-align: center; text-decoration: none; color: inherit; transition: 0.2s; position: relative;
         }
         .card:hover { border-color: #444; transform: translateY(-5px); }
         .card img { width: 100%; border-radius: 10px; margin-bottom: 15px; background: #0d0d0d; padding: 10px; box-sizing: border-box; }
-        .card .name { font-weight: 700; display: block; margin-bottom: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .card .price { color: #2ecc71; font-weight: 800; font-size: 14px; }
-        .card .id-tag { font-size: 11px; color: #444; display: block; margin-top: 8px; font-weight: 700; }
+        .card .name { font-weight: 700; display: block; margin-bottom: 8px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .price-tag { color: #2ecc71; font-weight: 800; font-size: 14px; }
+        .offsale-tag { color: #ff4444; font-weight: 800; font-size: 13px; text-transform: uppercase; }
+        .id-tag { font-size: 10px; color: #444; display: block; margin-top: 8px; }
     </style>
 </head>
 <body>
 
+    <div id="site-announcement" class="announcement-banner"></div>
+
     <div class="navbar">
-        <div class="logo">POLYTORY<span>ARCHIVE</span></div>
+        <div class="logo">POLYTORIA<span>ARCHIVE</span></div>
     </div>
 
     <div class="search-container">
-        <input type="text" id="search-input" placeholder="Search by item name..." oninput="handleSearch()">
+        <input type="text" id="search-input" placeholder="Search archive..." oninput="handleSearch()">
     </div>
 
     <div class="container">
@@ -44,6 +50,19 @@
 
     <script>
         let timer;
+
+        async function init() {
+            // Load announcement
+            const annRes = await fetch('/api/announcement');
+            const annData = await annRes.json();
+            if (annData.message) {
+                const banner = document.getElementById('site-announcement');
+                banner.innerText = annData.message;
+                banner.style.display = 'block';
+            }
+            fetchData();
+        }
+
         function handleSearch() {
             clearTimeout(timer);
             timer = setTimeout(fetchData, 300);
@@ -54,22 +73,19 @@
             const res = await fetch(`/api/prices?search=${encodeURIComponent(search)}`);
             const data = await res.json();
             
-            const grid = document.getElementById('market-grid');
-            if (data.length === 0) {
-                grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:#444; margin-top:50px;">No items found in archive.</p>';
-                return;
-            }
-
-            grid.innerHTML = data.map(item => `
+            document.getElementById('market-grid').innerHTML = data.map(item => `
                 <a href="/store/${item.item_id}" class="card">
-                    <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
+                    <img src="${item.thumbnail}">
                     <span class="name">${item.name}</span>
-                    <span class="price">${item.price.toLocaleString()} Bricks</span>
+                    ${item.price > 0 
+                        ? `<span class="price-tag">${item.price.toLocaleString()} Bricks</span>` 
+                        : `<span class="offsale-tag">Off-Sale</span>`}
                     <span class="id-tag">#${item.item_id}</span>
                 </a>
             `).join('');
         }
-        fetchData();
+
+        init();
     </script>
 </body>
 </html>
