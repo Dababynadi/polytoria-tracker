@@ -2,90 +2,85 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polytoria Market</title>
+    <title>Asset Archive</title>
     <style>
-        body { font-family: sans-serif; background: #0d0d0d; color: #eee; margin: 0; padding: 0; }
-        .header { background: #141414; padding: 40px 20px; text-align: center; border-bottom: 1px solid #222; }
+        body { font-family: sans-serif; background: #080808; color: #efefef; margin: 0; padding: 0; }
+        .nav { background: #111; padding: 25px; text-align: center; border-bottom: 1px solid #222; }
+        .nav h1 { margin: 0; font-size: 24px; letter-spacing: -1px; }
+
+        .search-container { max-width: 600px; margin: 30px auto; padding: 0 20px; }
+        #search-input { width: 100%; padding: 18px; border-radius: 12px; border: 1px solid #222; background: #141414; color: white; font-size: 16px; box-sizing: border-box; }
         
-        .search-box { max-width: 600px; margin: -25px auto 30px auto; padding: 0 20px; }
-        #search-input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: white; outline: none; }
-        #search-input:focus { border-color: #007bff; }
+        .filters { display: flex; justify-content: center; gap: 10px; margin-bottom: 40px; }
+        .btn { background: #141414; border: 1px solid #222; color: #666; padding: 12px 25px; border-radius: 30px; cursor: pointer; font-weight: bold; }
+        .btn.active { background: #fff; color: #000; border-color: #fff; }
 
-        .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 30px; }
-        .tab-btn { padding: 10px 25px; border-radius: 20px; border: 1px solid #333; background: #141414; color: #888; cursor: pointer; font-weight: bold; }
-        .tab-btn.active { background: white; color: black; border-color: white; }
-
-        .container { max-width: 1100px; margin: auto; padding: 0 20px; }
+        .container { max-width: 1200px; margin: auto; padding: 0 20px 100px 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
         
         .card { 
-            background: #141414; border: 1px solid #222; border-radius: 15px; padding: 20px; 
-            text-align: center; text-decoration: none; color: inherit; transition: 0.2s; 
+            background: #111; border: 1px solid #222; border-radius: 16px; padding: 20px; 
+            text-align: center; text-decoration: none; color: inherit; transition: 0.2s;
         }
-        .card:hover { border-color: #007bff; transform: translateY(-5px); }
-        .card img { width: 130px; height: 130px; margin-bottom: 15px; background: #0d0d0d; border-radius: 10px; }
+        .card:hover { border-color: #444; transform: translateY(-5px); background: #161616; }
+        .card img { width: 100%; border-radius: 10px; margin-bottom: 15px; filter: grayscale(0.3); }
+        .card .name { font-weight: bold; display: block; margin-bottom: 5px; }
+        .card .id-tag { font-size: 11px; color: #444; font-family: monospace; }
         
-        .name { font-weight: bold; margin-bottom: 5px; color: #fff; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .price { color: #2ecc71; font-weight: bold; font-size: 18px; }
-        .rap { font-size: 11px; color: #555; margin-top: 5px; font-weight: bold; }
-        .limited-badge { background: #f1c40f; color: black; font-size: 9px; font-weight: 900; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-bottom: 10px; display: inline-block; }
+        .offline-badge { font-size: 10px; color: #ff4444; border: 1px solid #ff4444; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; margin-bottom: 10px; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Market Analytics</h1>
+    <div class="nav">
+        <h1>ASSET<span>ARCHIVE</span></h1>
     </div>
 
-    <div class="search-box">
-        <input type="text" id="search-input" placeholder="Search items..." oninput="handleSearch()">
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Find offline items..." oninput="handleSearch()">
     </div>
 
-    <div class="tabs">
-        <button class="tab-btn active" id="btn-all" onclick="updateView('all')">All Items</button>
-        <button class="tab-btn" id="btn-lim" onclick="updateView('limited')">Limiteds</button>
+    <div class="filters">
+        <button class="btn active" id="btn-all" onclick="setMode('all')">All Assets</button>
+        <button class="btn" id="btn-lim" onclick="setMode('limited')">Legacy Limiteds</button>
     </div>
 
     <div class="container">
-        <div class="grid" id="market-grid"></div>
+        <div class="grid" id="asset-grid"></div>
     </div>
 
     <script>
-        let viewMode = 'all';
-        let searchTimer;
+        let mode = 'all';
+        let timer;
 
-        function updateView(mode) {
-            viewMode = mode;
-            document.getElementById('btn-all').classList.toggle('active', mode === 'all');
-            document.getElementById('btn-lim').classList.toggle('active', mode === 'limited');
-            fetchData();
+        function setMode(m) {
+            mode = m;
+            document.getElementById('btn-all').classList.toggle('active', m === 'all');
+            document.getElementById('btn-lim').classList.toggle('active', m === 'limited');
+            fetchItems();
         }
 
         function handleSearch() {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(fetchData, 300);
+            clearTimeout(timer);
+            timer = setTimeout(fetchItems, 300);
         }
 
-        async function fetchData() {
+        async function fetchItems() {
             const search = document.getElementById('search-input').value;
-            const isLim = viewMode === 'limited';
-            
-            const res = await fetch(`/api/prices?limited=${isLim}&search=${encodeURIComponent(search)}`);
+            const res = await fetch(`/api/items?limited=${mode === 'limited'}&search=${encodeURIComponent(search)}`);
             const data = await res.json();
             
-            document.getElementById('market-grid').innerHTML = data.map(item => `
-                <a href="/store/${item.item_id}" class="card">
-                    ${item.rap > 0 || item.is_limited ? '<span class="limited-badge">Limited</span>' : ''}
-                    <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
-                    <span class="name">${item.name}</span>
-                    <div class="price">${item.price.toLocaleString()}</div>
-                    <div class="rap">RAP: ${item.rap.toLocaleString()}</div>
-                    <div style="font-size:10px; color:#333; margin-top:8px;">ID: #${item.item_id}</div>
+            document.getElementById('asset-grid').innerHTML = data.map(i => `
+                <a href="/view/${i.item_id}" class="card">
+                    <div class="offline-badge">Offline</div>
+                    <img src="${i.thumbnail}">
+                    <span class="name">${i.name}</span>
+                    <span class="id-tag">#${i.item_id}</span>
                 </a>
             `).join('');
         }
         
-        fetchData();
+        fetchItems();
     </script>
 </body>
 </html>
