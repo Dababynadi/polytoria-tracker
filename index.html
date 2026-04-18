@@ -2,33 +2,72 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Catalog</title>
+    <title>Polytoria Tracker</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f9; padding: 20px; margin: 0; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #ddd; text-decoration: none; color: inherit; transition: 0.2s; }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #007bff; }
-        .card img { width: 120px; height: 120px; object-fit: contain; margin-bottom: 10px; }
-        .name { font-weight: bold; margin-bottom: 5px; color: #333; }
-        .price { color: #27ae60; font-weight: bold; }
+        body { font-family: 'Inter', sans-serif; background: #0f0f0f; color: #efefef; margin: 0; padding: 0; }
+        
+        /* The Banner */
+        .hero { background: #1a1a1a; padding: 60px 20px; text-align: center; border-bottom: 1px solid #333; }
+        .hero h1 { margin: 0; font-size: 32px; color: white; }
+        .hero p { color: #888; margin-top: 10px; font-size: 16px; }
+
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        
+        /* The Cards */
+        .card { 
+            background: #1a1a1a; 
+            padding: 20px; 
+            border-radius: 12px; 
+            border: 1px solid #333; 
+            text-align: center; 
+            text-decoration: none; 
+            color: inherit; 
+            transition: 0.2s; 
+        }
+        .card:hover { border-color: #007bff; transform: translateY(-5px); background: #222; }
+        .card img { width: 140px; height: 140px; object-fit: contain; margin-bottom: 15px; }
+        .name { font-weight: bold; font-size: 16px; margin-bottom: 10px; height: 2.4em; overflow: hidden; }
+        .price { color: #27ae60; font-weight: bold; font-size: 18px; }
+        .rap { font-size: 12px; color: #888; margin-top: 5px; }
+
+        footer { margin-top: 80px; padding: 40px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 13px; }
+        footer a { color: #888; text-decoration: none; margin: 0 10px; }
     </style>
 </head>
 <body>
-    <h1 style="text-align:center; color:#2c3e50;">Market Catalog</h1>
-    <div class="grid" id="market-grid"></div>
+
+    <div class="hero">
+        <h1>Market Tracker</h1>
+        <p>Providing the most accurate item values and analytics.</p>
+    </div>
+
+    <div class="container">
+        <div class="grid" id="market-grid"></div>
+    </div>
+
+    <footer>
+        <div style="margin-bottom: 15px;">
+            <a href="#">Discord</a>
+            <a href="#">GitHub</a>
+            <a href="/internal/update">Sync</a>
+        </div>
+        <p>Not associated with the <a href="https://polytoria.com" style="color:#007bff">Polytoria</a> team</p>
+        <p>&copy; 2026 Richard F. Projects</p>
+    </footer>
+
     <script>
         async function load() {
-            try {
-                const res = await fetch('/api/prices');
-                const data = await res.json();
-                document.getElementById('market-grid').innerHTML = data.map(item => `
-                    <a href="/store/${item.item_id}" class="card">
-                        <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
-                        <div class="name">${item.name}</div>
-                        <div class="price">${item.price.toLocaleString()} Bricks</div>
-                    </a>
-                `).join('');
-            } catch (e) { console.log(e); }
+            const res = await fetch('/api/prices');
+            const data = await res.json();
+            document.getElementById('market-grid').innerHTML = data.map(item => `
+                <a href="/store/${item.item_id}" class="card">
+                    <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
+                    <div class="name">${item.name}</div>
+                    <div class="price">${item.price.toLocaleString()} Bricks</div>
+                    <div class="rap">RAP: ${item.rap.toLocaleString()}</div>
+                </a>
+            `).join('');
         }
         load();
     </script>
