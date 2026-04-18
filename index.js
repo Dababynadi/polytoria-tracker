@@ -18,34 +18,40 @@ async function initDb() {
                 price INT,
                 rap INT,
                 thumbnail TEXT,
+                is_limited BOOLEAN DEFAULT FALSE,
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-    } catch (err) { console.log("DB Ready"); }
+        // Force add column if it was missed
+        await pool.query(`ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS is_limited BOOLEAN DEFAULT FALSE;`).catch(() => {});
+        console.log("Database initialized and columns verified.");
+    } catch (err) { console.error("Database initialization error:", err); }
 }
 initDb();
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// --- ROUTES ---
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Fixed API: This version avoids the 'Status 1' error by using a standard GROUP BY
+// Fixed API with Fallback
 app.get('/api/prices', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT * FROM item_prices 
-            WHERE id IN (SELECT MAX(id) FROM item_prices GROUP BY item_id)
-            AND rap > 0
-            ORDER BY recorded_at DESC
-        `);
+        const onlyLimited = req.query.limited === 'true';
+        let query = `SELECT * FROM item_prices WHERE id IN (SELECT MAX(id) FROM item_prices GROUP BY item_id)`;
+        
+        if (onlyLimited) {
+            query += ` AND (rap > 0 OR is_limited = TRUE)`;
+        }
+        
+        query += ` ORDER BY recorded_at DESC LIMIT 200`;
+        
+        const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) { 
-        console.error(err);
-        res.json([]); 
+        console.error("API Error:", err);
+        res.status(500).json({ error: "Database query failed", details: err.message }); 
     }
 });
 
@@ -53,7 +59,7 @@ app.get('/store/:id', async (req, res) => {
     try {
         const itemId = req.params.id;
         const history = await pool.query('SELECT * FROM item_prices WHERE item_id = $1 ORDER BY recorded_at ASC', [itemId]);
-        if (history.rows.length === 0) return res.status(404).send("Item not found.");
+        if (history.rows.length === 0) return res.status(404).send("Item history not found. Sync data first.");
         
         const latest = history.rows[history.rows.length - 1];
         const chartLabels = history.rows.map(r => new Date(r.recorded_at).toLocaleDateString());
@@ -74,7 +80,6 @@ app.get('/store/:id', async (req, res) => {
                     .info-box { background: #111; border: 1px solid #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
                     .label { font-size: 11px; color: #777; font-weight: bold; text-transform: uppercase; }
                     .value { font-size: 18px; font-weight: bold; margin-top: 5px; }
-                    .chart-card { background: #161616; border: 1px solid #2a2a2a; border-radius: 12px; padding: 25px; margin-top: 20px; }
                     .btn-buy { display: block; text-align: center; background: #007bff; color: white; border: none; padding: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px; }
                 </style>
             </head>
@@ -85,6 +90,7 @@ app.get('/store/:id', async (req, res) => {
                             <div class="img-container"><img src="${latest.thumbnail}"></div>
                             <h2 style="margin:0;">${latest.name}</h2>
                             <a href="https://polytoria.com/store/${latest.item_id}" target="_blank" class="btn-buy">View on Polytoria</a>
+                            <br><a href="/" style="color:#666; text-decoration:none; font-size:12px; display:block; text-align:center;">← Back</a>
                         </div>
                         <div>
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -93,11 +99,13 @@ app.get('/store/:id', async (req, res) => {
                             </div>
                             <div class="card" style="margin-top:10px;">
                                 <div class="label">Status</div>
-                                <div style="color:#2ecc71; font-weight:bold; margin-top:5px;">Limited / Collectible</div>
+                                <div style="color:${latest.rap > 0 ? '#f1c40f' : '#666'}; font-weight:bold; margin-top:5px;">
+                                    ${latest.rap > 0 ? 'LIMITED / COLLECTIBLE' : 'STANDARD ITEM'}
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="chart-card">
+                    <div class="card" style="margin-top:20px;">
                         <canvas id="rapChart"></canvas>
                     </div>
                 </div>
@@ -122,7 +130,7 @@ app.get('/store/:id', async (req, res) => {
             </body>
             </html>
         `);
-    } catch (err) { res.status(500).send("Error"); }
+    } catch (err) { res.status(500).send("Error loading specific item."); }
 });
 
 app.get('/internal/update', (req, res) => {
@@ -142,18 +150,16 @@ app.post('/internal/save', async (req, res) => {
         const rawData = JSON.parse(req.body.data);
         const items = rawData.items || rawData.assets || rawData.data || (Array.isArray(rawData) ? rawData : []);
         for (let item of items) {
-            // ONLY SAVE IF IT HAS A RAP (Filter for Limiteds)
-            if (item.rap > 0) {
-                const itemId = item.id || item.assetId || 0;
-                const thumb = item.thumbnail || `https://c0.ptacdn.com/thumbnails/assets/${itemId}-icon.png`;
-                await pool.query(
-                    'INSERT INTO item_prices (item_id, name, price, rap, thumbnail) VALUES ($1, $2, $3, $4, $5)',
-                    [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb]
-                );
-            }
+            const itemId = item.id || item.assetId || 0;
+            const thumb = item.thumbnail || \`https://c0.ptacdn.com/thumbnails/assets/\${itemId}-icon.png\`;
+            const isLim = item.rap > 0 || item.isLimited === true;
+            await pool.query(
+                'INSERT INTO item_prices (item_id, name, price, rap, thumbnail, is_limited) VALUES ($1, $2, $3, $4, $5, $6)',
+                [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb, isLim]
+            );
         }
         res.send("Sync Complete! <a href='/'>Go Home</a>");
-    } catch (err) { res.send("Error: " + err.message); }
+    } catch (err) { res.send("Error during sync: " + err.message); }
 });
 
 app.listen(process.env.PORT || 3000);
