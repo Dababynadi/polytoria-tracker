@@ -29,6 +29,8 @@ async function initDb() {
 }
 initDb();
 
+app.use(express.urlencoded({ extended: true }));
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -42,32 +44,39 @@ app.get('/api/prices', async (req, res) => {
     }
 });
 
-app.get('/internal/update', async (req, res) => {
+// The "Manual Sync" Page - Use this to bypass the 403 error!
+app.get('/internal/update', (req, res) => {
+    res.send(`
+        <html>
+        <body style="font-family:sans-serif; padding:20px; background:#f4f7f9;">
+            <div style="max-width:500px; margin:auto; background:white; padding:20px; border-radius:10px; border:1px solid #ddd;">
+                <h2>Market Sync</h2>
+                <p>1. <a href="https://api.polytoria.com/v1/store/items?isLimited=true" target="_blank">Tap here</a> to see the data.</p>
+                <p>2. <b>Select All</b> and <b>Copy</b> all the text on that page.</p>
+                <p>3. Paste it below and hit Save.</p>
+                <form action="/internal/save" method="POST">
+                    <textarea name="data" rows="10" style="width:100%; border:1px solid #ccc; border-radius:5px;"></textarea><br><br>
+                    <button type="submit" style="width:100%; padding:15px; background:#007bff; color:white; border:none; border-radius:5px; font-weight:bold;">Save to Database</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/internal/save', async (req, res) => {
     try {
-        // Using AllOrigins proxy to bypass Cloudflare/403 blocks
-        const targetUrl = encodeURIComponent('https://api.polytoria.com/v1/store/items?isLimited=true');
-        const proxyUrl = `https://api.allorigins.win/get?url=${targetUrl}`;
-
-        const response = await axios.get(proxyUrl);
-        
-        // AllOrigins returns the data as a string in the "contents" property
-        const data = JSON.parse(response.data.contents);
-        const items = data.items;
-
-        if (!items || items.length === 0) {
-            throw new Error("No items found in the API response.");
-        }
-
+        const rawData = JSON.parse(req.body.data);
+        const items = rawData.items;
         for (let item of items) {
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, rap) VALUES ($1, $2, $3, $4)',
                 [item.id, item.name, item.price, item.rap]
             );
         }
-        res.send(`Update successful! Saved ${items.length} items to your database.`);
+        res.send(`Successfully saved ${items.length} items! <a href="/">Go to Home</a>`);
     } catch (err) {
-        console.error(err);
-        res.status(500).send("Update failed: " + err.message);
+        res.status(500).send("Error saving data: " + err.message);
     }
 });
 
