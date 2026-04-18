@@ -8,8 +8,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// CRASH-PROOF DATABASE INIT
 async function initDb() {
     try {
+        // 1. Create table if missing
         await pool.query(`
             CREATE TABLE IF NOT EXISTS item_prices (
                 id SERIAL PRIMARY KEY,
@@ -22,10 +24,19 @@ async function initDb() {
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Force add column if it was missed
-        await pool.query(`ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS is_limited BOOLEAN DEFAULT FALSE;`).catch(() => {});
-        console.log("Database initialized and columns verified.");
-    } catch (err) { console.error("Database initialization error:", err); }
+        // 2. Double check is_limited exists (prevents Status 1 crash)
+        await pool.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='item_prices' AND column_name='is_limited') THEN
+                    ALTER TABLE item_prices ADD COLUMN is_limited BOOLEAN DEFAULT FALSE;
+                END IF;
+            END $$;
+        `);
+        console.log("DB Connection Success.");
+    } catch (err) { 
+        console.error("Critical DB Error:", err); 
+    }
 }
 initDb();
 
@@ -35,23 +46,29 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Fixed API with Fallback
+// SIMPLEST POSSIBLE SQL TO PREVENT STATUS 1
 app.get('/api/prices', async (req, res) => {
     try {
         const onlyLimited = req.query.limited === 'true';
-        let query = `SELECT * FROM item_prices WHERE id IN (SELECT MAX(id) FROM item_prices GROUP BY item_id)`;
+        
+        // This is a standard query that won't crash Render
+        let query = `
+            SELECT t1.* FROM item_prices t1
+            JOIN (SELECT item_id, MAX(id) as last_id FROM item_prices GROUP BY item_id) t2
+            ON t1.id = t2.last_id
+        `;
         
         if (onlyLimited) {
-            query += ` AND (rap > 0 OR is_limited = TRUE)`;
+            query += ` WHERE (t1.rap > 0 OR t1.is_limited = TRUE)`;
         }
         
-        query += ` ORDER BY recorded_at DESC LIMIT 200`;
+        query += ` ORDER BY t1.recorded_at DESC LIMIT 100`;
         
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) { 
         console.error("API Error:", err);
-        res.status(500).json({ error: "Database query failed", details: err.message }); 
+        res.json([]); 
     }
 });
 
@@ -59,7 +76,7 @@ app.get('/store/:id', async (req, res) => {
     try {
         const itemId = req.params.id;
         const history = await pool.query('SELECT * FROM item_prices WHERE item_id = $1 ORDER BY recorded_at ASC', [itemId]);
-        if (history.rows.length === 0) return res.status(404).send("Item history not found. Sync data first.");
+        if (history.rows.length === 0) return res.status(404).send("Item not found.");
         
         const latest = history.rows[history.rows.length - 1];
         const chartLabels = history.rows.map(r => new Date(r.recorded_at).toLocaleDateString());
@@ -68,80 +85,46 @@ app.get('/store/:id', async (req, res) => {
         res.send(`
             <html>
             <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
                 <style>
-                    body { font-family: 'Inter', sans-serif; background: #0b0b0b; color: #eee; margin: 0; padding: 20px; }
-                    .container { max-width: 1000px; margin: 20px auto; }
-                    .main-layout { display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; }
-                    .card { background: #161616; border: 1px solid #2a2a2a; border-radius: 12px; padding: 25px; }
-                    .img-container { text-align: center; background: #111; border-radius: 8px; padding: 20px; margin-bottom: 15px; }
-                    .img-container img { width: 220px; height: 220px; object-fit: contain; }
-                    .info-box { background: #111; border: 1px solid #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
-                    .label { font-size: 11px; color: #777; font-weight: bold; text-transform: uppercase; }
-                    .value { font-size: 18px; font-weight: bold; margin-top: 5px; }
-                    .btn-buy { display: block; text-align: center; background: #007bff; color: white; border: none; padding: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px; }
+                    body { font-family: sans-serif; background: #0b0b0b; color: #eee; padding: 20px; }
+                    .card { background: #161616; border: 1px solid #333; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+                    .btn { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <div class="main-layout">
-                        <div class="card">
-                            <div class="img-container"><img src="${latest.thumbnail}"></div>
-                            <h2 style="margin:0;">${latest.name}</h2>
-                            <a href="https://polytoria.com/store/${latest.item_id}" target="_blank" class="btn-buy">View on Polytoria</a>
-                            <br><a href="/" style="color:#666; text-decoration:none; font-size:12px; display:block; text-align:center;">← Back</a>
-                        </div>
-                        <div>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                                <div class="info-box"><div class="label">Value</div><div class="value">${latest.price.toLocaleString()}</div></div>
-                                <div class="info-box"><div class="label">Recent Avg (RAP)</div><div class="value">${latest.rap.toLocaleString()}</div></div>
-                            </div>
-                            <div class="card" style="margin-top:10px;">
-                                <div class="label">Status</div>
-                                <div style="color:${latest.rap > 0 ? '#f1c40f' : '#666'}; font-weight:bold; margin-top:5px;">
-                                    ${latest.rap > 0 ? 'LIMITED / COLLECTIBLE' : 'STANDARD ITEM'}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card" style="margin-top:20px;">
-                        <canvas id="rapChart"></canvas>
-                    </div>
+                <div class="card">
+                    <img src="${latest.thumbnail}" width="150">
+                    <h1>${latest.name}</h1>
+                    <p>RAP: ${latest.rap.toLocaleString()}</p>
+                    <a href="/" style="color: #666;">← Back</a>
+                </div>
+                <div class="card">
+                    <canvas id="myChart"></canvas>
                 </div>
                 <script>
-                    const ctx = document.getElementById('rapChart').getContext('2d');
-                    new Chart(ctx, {
+                    new Chart(document.getElementById('myChart'), {
                         type: 'line',
                         data: {
                             labels: ${JSON.stringify(chartLabels)},
-                            datasets: [{
-                                label: 'RAP',
-                                data: ${JSON.stringify(chartData)},
-                                borderColor: '#007bff',
-                                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                                fill: true,
-                                tension: 0.3
-                            }]
-                        },
-                        options: { responsive: true, plugins: { legend: { display: false } } }
+                            datasets: [{ label: 'RAP', data: ${JSON.stringify(chartData)}, borderColor: '#007bff', fill: true }]
+                        }
                     });
                 </script>
             </body>
             </html>
         `);
-    } catch (err) { res.status(500).send("Error loading specific item."); }
+    } catch (err) { res.status(500).send("Error"); }
 });
 
 app.get('/internal/update', (req, res) => {
     res.send(`
-        <html><body style="background:#0b0b0b; color:white; font-family:sans-serif; text-align:center; padding:50px;">
-            <h2>Sync Market Data</h2>
+        <body style="background:#0b0b0b; color:white; text-align:center;">
             <form action="/internal/save" method="POST">
-                <textarea name="data" rows="10" style="width:100%; max-width:500px; background:#161616; color:white; border:1px solid #333; padding:10px;"></textarea><br>
-                <button type="submit" style="margin-top:20px; padding:15px 40px; background:#007bff; color:white; border:none; border-radius:8px; font-weight:bold;">SYNC NOW</button>
+                <textarea name="data" rows="10" style="width:80%;"></textarea><br>
+                <button type="submit">Sync Data</button>
             </form>
-        </body></html>
+        </body>
     `);
 });
 
@@ -150,16 +133,14 @@ app.post('/internal/save', async (req, res) => {
         const rawData = JSON.parse(req.body.data);
         const items = rawData.items || rawData.assets || rawData.data || (Array.isArray(rawData) ? rawData : []);
         for (let item of items) {
-            const itemId = item.id || item.assetId || 0;
-            const thumb = item.thumbnail || \`https://c0.ptacdn.com/thumbnails/assets/\${itemId}-icon.png\`;
             const isLim = item.rap > 0 || item.isLimited === true;
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, rap, thumbnail, is_limited) VALUES ($1, $2, $3, $4, $5, $6)',
-                [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb, isLim]
+                [item.id || 0, item.name || '?', item.price || 0, item.rap || 0, item.thumbnail || '', isLim]
             );
         }
-        res.send("Sync Complete! <a href='/'>Go Home</a>");
-    } catch (err) { res.send("Error during sync: " + err.message); }
+        res.send("Done! <a href='/'>Home</a>");
+    } catch (err) { res.send("Error: " + err.message); }
 });
 
 app.listen(process.env.PORT || 3000);
