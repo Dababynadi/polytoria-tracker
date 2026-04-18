@@ -1,6 +1,5 @@
 const express = require('express');
 const { Pool } = require('pg');
-const axios = require('axios');
 const path = require('path');
 const app = express();
 
@@ -9,7 +8,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// AUTO-SETUP: Creates the table if it doesn't exist
 async function initDb() {
     try {
         await pool.query(`
@@ -29,7 +27,7 @@ async function initDb() {
 }
 initDb();
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -44,19 +42,18 @@ app.get('/api/prices', async (req, res) => {
     }
 });
 
-// The "Manual Sync" Page - Use this to bypass the 403 error!
+// Manual Sync UI
 app.get('/internal/update', (req, res) => {
     res.send(`
         <html>
-        <body style="font-family:sans-serif; padding:20px; background:#f4f7f9;">
-            <div style="max-width:500px; margin:auto; background:white; padding:20px; border-radius:10px; border:1px solid #ddd;">
-                <h2>Market Sync</h2>
-                <p>1. <a href="https://api.polytoria.com/v1/store/items?isLimited=true" target="_blank">Tap here</a> to see the data.</p>
-                <p>2. <b>Select All</b> and <b>Copy</b> all the text on that page.</p>
-                <p>3. Paste it below and hit Save.</p>
+        <body style="font-family:sans-serif; padding:20px; background:#f0f2f5; text-align:center;">
+            <div style="max-width:500px; margin:auto; background:white; padding:30px; border-radius:15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h2 style="color:#333;">Market Manual Sync</h2>
+                <p>1. <a href="https://api.polytoria.com/v1/store/items?isLimited=true" target="_blank" style="color:#007bff; font-weight:bold;">Tap here to open data</a></p>
+                <p style="font-size:0.9em; color:#666;">If the page looks like a normal website, it <b>WONT</b> work. It must look like messy text starting with {"success":true...</p>
                 <form action="/internal/save" method="POST">
-                    <textarea name="data" rows="10" style="width:100%; border:1px solid #ccc; border-radius:5px;"></textarea><br><br>
-                    <button type="submit" style="width:100%; padding:15px; background:#007bff; color:white; border:none; border-radius:5px; font-weight:bold;">Save to Database</button>
+                    <textarea name="data" rows="8" placeholder="Paste messy text here..." style="width:100%; padding:10px; border-radius:5px; border:1px solid #ccc;"></textarea><br><br>
+                    <button type="submit" style="width:100%; padding:15px; background:#28a745; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer;">Update Database</button>
                 </form>
             </div>
         </body>
@@ -66,17 +63,22 @@ app.get('/internal/update', (req, res) => {
 
 app.post('/internal/save', async (req, res) => {
     try {
+        if (!req.body.data.trim().startsWith('{')) {
+            return res.status(400).send("<b>Error:</b> That looks like HTML or an error page. Make sure you copy the RAW messy text from the link.");
+        }
+        
         const rawData = JSON.parse(req.body.data);
-        const items = rawData.items;
+        const items = rawData.items || [];
+        
         for (let item of items) {
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, rap) VALUES ($1, $2, $3, $4)',
                 [item.id, item.name, item.price, item.rap]
             );
         }
-        res.send(`Successfully saved ${items.length} items! <a href="/">Go to Home</a>`);
+        res.send(`Successfully saved ${items.length} items! <a href="/">Return Home</a>`);
     } catch (err) {
-        res.status(500).send("Error saving data: " + err.message);
+        res.status(500).send("<b>Sync Error:</b> Make sure you copied the entire page. Error: " + err.message);
     }
 });
 
