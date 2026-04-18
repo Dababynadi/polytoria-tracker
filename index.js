@@ -8,7 +8,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Setup with safety checks for new columns
 async function initDb() {
     try {
         await pool.query(`
@@ -24,30 +23,48 @@ async function initDb() {
             );
         `);
         await pool.query(`ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS is_limited BOOLEAN DEFAULT FALSE;`).catch(() => {});
-    } catch (err) { console.log("Init sequence complete."); }
+    } catch (err) { console.log("Database initialized."); }
 }
 initDb();
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Helper for Modern Footer
-const FOOTER_HTML = `
-    <footer style="margin-top: 80px; padding: 60px 20px; border-top: 1px solid #222; text-align: center; background: #0a0a0a;">
-        <div style="margin-bottom: 20px;">
-            <a href="#" style="color: #666; margin: 0 15px; text-decoration: none; font-size: 14px;">Discord</a>
-            <a href="#" style="color: #666; margin: 0 15px; text-decoration: none; font-size: 14px;">Twitter</a>
-            <a href="/internal/update" style="color: #444; margin: 0 15px; text-decoration: none; font-size: 14px;">Admin</a>
-        </div>
-        <p style="color: #444; font-size: 12px;">&copy; 2026 Richard F. | Polytoria Project Properties</p>
-        <p style="color: #333; font-size: 11px; margin-top: 10px;">Not affiliated with Polytoria.</p>
-    </footer>
-`;
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Modern Item Page
+// Advanced API with Search and Limited Filtering
+app.get('/api/prices', async (req, res) => {
+    try {
+        const onlyLimited = req.query.limited === 'true';
+        const search = req.query.search ? req.query.search.toLowerCase() : '';
+        
+        let query = `
+            SELECT t1.* FROM item_prices t1 
+            JOIN (SELECT item_id, MAX(id) as last_id FROM item_prices GROUP BY item_id) t2 
+            ON t1.id = t2.last_id
+            WHERE 1=1
+        `;
+        
+        const params = [];
+        if (onlyLimited) {
+            query += ` AND (t1.rap > 0 OR t1.is_limited = TRUE)`;
+        }
+        if (search) {
+            params.push(`%${search}%`);
+            query += ` AND LOWER(t1.name) LIKE $${params.length}`;
+        }
+        
+        query += ` ORDER BY t1.recorded_at DESC LIMIT 100`;
+        
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (err) { 
+        console.error(err);
+        res.json([]); 
+    }
+});
+
 app.get('/store/:id', async (req, res) => {
     try {
         const itemId = req.params.id;
@@ -67,15 +84,13 @@ app.get('/store/:id', async (req, res) => {
                     body { font-family: 'Inter', sans-serif; background: #0d0d0d; color: #fff; margin: 0; padding: 20px; }
                     .wrapper { max-width: 1100px; margin: 40px auto; }
                     .main-card { background: #141414; border: 1px solid #222; border-radius: 16px; display: flex; flex-wrap: wrap; gap: 40px; padding: 40px; }
-                    .item-view { flex: 1; min-width: 300px; text-align: center; }
+                    .item-view { flex: 1; text-align: center; }
                     .item-view img { width: 100%; max-width: 300px; background: #1a1a1a; border-radius: 12px; padding: 20px; border: 1px solid #282828; }
-                    .stats-view { flex: 1.5; min-width: 300px; }
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 25px 0; }
                     .stat-box { background: #1a1a1a; border: 1px solid #282828; padding: 20px; border-radius: 12px; }
-                    .stat-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-                    .stat-value { font-size: 22px; font-weight: 700; margin-top: 5px; color: #fff; }
-                    .btn-main { display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 18px; border-radius: 10px; font-weight: bold; font-size: 16px; margin-top: 20px; transition: 0.3s; }
-                    .btn-main:hover { background: #0056b3; transform: translateY(-2px); }
+                    .stat-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; }
+                    .stat-value { font-size: 22px; font-weight: 700; margin-top: 5px; }
+                    .btn-main { display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 18px; border-radius: 10px; font-weight: bold; }
                     .chart-section { background: #141414; border: 1px solid #222; border-radius: 16px; padding: 30px; margin-top: 30px; }
                 </style>
             </head>
@@ -87,46 +102,28 @@ app.get('/store/:id', async (req, res) => {
                             <h1 style="font-size: 32px; margin: 25px 0 10px 0;">${latest.name}</h1>
                             <div style="color: #666; font-size: 14px;">Asset ID: #${latest.item_id}</div>
                         </div>
-                        <div class="stats-view">
+                        <div style="flex: 1.5;">
                             <div class="stat-grid">
                                 <div class="stat-box"><div class="stat-label">Value</div><div class="stat-value" style="color:#2ecc71;">${latest.price.toLocaleString()}</div></div>
                                 <div class="stat-box"><div class="stat-label">RAP</div><div class="stat-value">${latest.rap.toLocaleString()}</div></div>
-                                <div class="stat-box"><div class="stat-label">Demand</div><div class="stat-value" style="color:#f1c40f;">High</div></div>
-                                <div class="stat-box"><div class="stat-label">Trend</div><div class="stat-value" style="color:#3498db;">Stable</div></div>
                             </div>
                             <a href="https://polytoria.com/store/${latest.item_id}" class="btn-main">View on Polytoria</a>
-                            <a href="/" style="display:block; text-align:center; margin-top:20px; color:#555; text-decoration:none; font-size:14px;">← Back to Market</a>
+                            <a href="/" style="display:block; text-align:center; margin-top:20px; color:#555; text-decoration:none;">← Back</a>
                         </div>
                     </div>
                     <div class="chart-section">
-                        <div class="stat-label" style="margin-bottom: 20px;">Price History</div>
                         <canvas id="itemChart" height="120"></canvas>
                     </div>
                 </div>
-                ${FOOTER_HTML}
                 <script>
                     const ctx = document.getElementById('itemChart').getContext('2d');
                     new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: ${JSON.stringify(chartLabels)},
-                            datasets: [{
-                                label: 'RAP',
-                                data: ${JSON.stringify(chartData)},
-                                borderColor: '#007bff',
-                                backgroundColor: 'rgba(0, 123, 255, 0.05)',
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 5
-                            }]
+                            datasets: [{ label: 'RAP', data: ${JSON.stringify(chartData)}, borderColor: '#007bff', fill: true, tension: 0.4 }]
                         },
-                        options: {
-                            plugins: { legend: { display: false } },
-                            scales: { 
-                                y: { grid: { color: '#222' }, ticks: { color: '#555' } },
-                                x: { grid: { display: false }, ticks: { color: '#555' } }
-                            }
-                        }
+                        options: { plugins: { legend: { display: false } } }
                     });
                 </script>
             </body>
@@ -135,27 +132,13 @@ app.get('/store/:id', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-app.get('/api/prices', async (req, res) => {
-    try {
-        const onlyLimited = req.query.limited === 'true';
-        let query = `SELECT t1.* FROM item_prices t1 JOIN (SELECT item_id, MAX(id) as last_id FROM item_prices GROUP BY item_id) t2 ON t1.id = t2.last_id`;
-        if (onlyLimited) { query += ` WHERE (t1.rap > 0 OR t1.is_limited = TRUE)`; }
-        query += ` ORDER BY t1.recorded_at DESC`;
-        const result = await pool.query(query);
-        res.json(result.rows);
-    } catch (err) { res.json([]); }
-});
-
 app.get('/internal/update', (req, res) => {
     res.send(`
-        <body style="background:#0d0d0d; color:white; font-family:sans-serif; text-align:center; padding:100px;">
-            <div style="max-width:500px; margin:auto; background:#141414; padding:40px; border-radius:12px; border:1px solid #222;">
-                <h2>System Sync</h2>
-                <form action="/internal/save" method="POST">
-                    <textarea name="data" rows="10" style="width:100%; background:#0d0d0d; color:white; border:1px solid #333; border-radius:8px; padding:15px; margin-bottom:20px;"></textarea>
-                    <button type="submit" style="width:100%; background:#007bff; color:white; border:none; padding:15px; border-radius:8px; cursor:pointer; font-weight:bold;">Push Data</button>
-                </form>
-            </div>
+        <body style="background:#0d0d0d; color:white; font-family:sans-serif; text-align:center; padding:50px;">
+            <form action="/internal/save" method="POST">
+                <textarea name="data" rows="10" style="width:80%; background:#141414; color:white; border:1px solid #333; padding:15px;"></textarea><br>
+                <button type="submit" style="padding:15px 40px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">Sync Data</button>
+            </form>
         </body>
     `);
 });
@@ -173,7 +156,7 @@ app.post('/internal/save', async (req, res) => {
                 [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb, isLim]
             );
         }
-        res.send("Sync successful! <a href='/'>Return Home</a>");
+        res.send("Sync successful! <a href='/'>Go Home</a>");
     } catch (err) { res.send("Error: " + err.message); }
 });
 
