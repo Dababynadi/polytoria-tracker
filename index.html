@@ -2,44 +2,44 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polytoria Tracker</title>
+    <title>Polytoria Market Tracker</title>
     <style>
-        body { font-family: 'Inter', sans-serif; background: #0f0f0f; color: #efefef; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #0b0b0b; color: #efefef; margin: 0; padding: 0; }
         
-        /* The Banner */
-        .hero { background: #1a1a1a; padding: 60px 20px; text-align: center; border-bottom: 1px solid #333; }
-        .hero h1 { margin: 0; font-size: 32px; color: white; }
-        .hero p { color: #888; margin-top: 10px; font-size: 16px; }
+        /* Professional Hero Banner */
+        .hero { background: #161616; padding: 70px 20px; text-align: center; border-bottom: 1px solid #2a2a2a; }
+        .hero h1 { margin: 0; font-size: 36px; font-weight: 800; letter-spacing: -1px; }
+        .hero p { color: #777; margin-top: 10px; font-size: 16px; }
 
         .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
         
-        /* The Cards */
         .card { 
-            background: #1a1a1a; 
+            background: #161616; 
             padding: 20px; 
             border-radius: 12px; 
-            border: 1px solid #333; 
+            border: 1px solid #2a2a2a; 
             text-align: center; 
             text-decoration: none; 
             color: inherit; 
-            transition: 0.2s; 
+            transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
         }
-        .card:hover { border-color: #007bff; transform: translateY(-5px); background: #222; }
+        .card:hover { border-color: #007bff; transform: translateY(-4px); background: #1c1c1c; }
         .card img { width: 140px; height: 140px; object-fit: contain; margin-bottom: 15px; }
-        .name { font-weight: bold; font-size: 16px; margin-bottom: 10px; height: 2.4em; overflow: hidden; }
-        .price { color: #27ae60; font-weight: bold; font-size: 18px; }
-        .rap { font-size: 12px; color: #888; margin-top: 5px; }
+        
+        .name { font-weight: 700; font-size: 15px; margin-bottom: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .price { color: #2ecc71; font-weight: bold; font-size: 17px; }
+        .rap { font-size: 11px; color: #666; margin-top: 4px; font-weight: bold; text-transform: uppercase; }
 
-        footer { margin-top: 80px; padding: 40px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 13px; }
+        footer { margin-top: 80px; padding: 60px 20px; border-top: 1px solid #2a2a2a; text-align: center; color: #555; font-size: 13px; }
         footer a { color: #888; text-decoration: none; margin: 0 10px; }
     </style>
 </head>
 <body>
 
     <div class="hero">
-        <h1>Market Tracker</h1>
-        <p>Providing the most accurate item values and analytics.</p>
+        <h1>Polytoria Tracker</h1>
+        <p>Advanced item values, RAP history, and market analytics.</p>
     </div>
 
     <div class="container">
@@ -47,13 +47,13 @@
     </div>
 
     <footer>
-        <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 20px;">
             <a href="#">Discord</a>
             <a href="#">GitHub</a>
-            <a href="/internal/update">Sync</a>
+            <a href="/internal/update">Sync Engine</a>
         </div>
-        <p>Not associated with the <a href="https://polytoria.com" style="color:#007bff">Polytoria</a> team</p>
-        <p>&copy; 2026 Richard F. Projects</p>
+        <p>Not associated with the <a href="https://polytoria.com" style="color:#007bff; text-decoration:none;">Polytoria</a> team</p>
+        <p>&copy; 2026 Richard F. Projects | Site Administrator</p>
     </footer>
 
     <script>
