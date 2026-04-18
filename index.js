@@ -9,7 +9,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// AUTO-SETUP: Creates the table if it doesn't exist
 async function initDb() {
     try {
         await pool.query(`
@@ -22,9 +21,9 @@ async function initDb() {
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("Database table is ready.");
+        console.log("Database table ready.");
     } catch (err) {
-        console.error("Database init error:", err);
+        console.error("DB Error:", err);
     }
 }
 initDb();
@@ -44,10 +43,13 @@ app.get('/api/prices', async (req, res) => {
 
 app.get('/internal/update', async (req, res) => {
     try {
-        // We add the User-Agent here to stop Polytoria from blocking us (403 error)
         const response = await axios.get('https://api.polytoria.com/v1/store/items?isLimited=true', {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://polytoria.com/',
+                'Origin': 'https://polytoria.com'
             }
         });
         
@@ -58,8 +60,9 @@ app.get('/internal/update', async (req, res) => {
                 [item.id, item.name, item.price, item.rap]
             );
         }
-        res.send("Update successful! Prices saved to database.");
+        res.send("Update successful! Prices saved.");
     } catch (err) {
+        console.error(err);
         res.status(500).send("Update failed: " + err.message);
     }
 });
