@@ -17,7 +17,7 @@ async function initDb() {
                 name TEXT,
                 price INT,
                 thumbnail TEXT,
-                description TEXT DEFAULT 'A look as old as time.',
+                description TEXT,
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -31,11 +31,15 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API: Fetches all archived items (No RAP info)
+// API: Search tool logic
 app.get('/api/prices', async (req, res) => {
     try {
         const search = req.query.search ? req.query.search.toLowerCase() : '';
-        let query = `SELECT t1.* FROM item_prices t1 JOIN (SELECT item_id, MAX(id) as last_id FROM item_prices GROUP BY item_id) t2 ON t1.id = t2.last_id`;
+        let query = `
+            SELECT t1.* FROM item_prices t1 
+            JOIN (SELECT item_id, MAX(id) as last_id FROM item_prices GROUP BY item_id) t2 
+            ON t1.id = t2.last_id
+        `;
         const params = [];
 
         if (search) {
@@ -49,13 +53,16 @@ app.get('/api/prices', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// Individual Item View (Styled like your screenshots)
+// Single Item View
 app.get('/store/:id', async (req, res) => {
     try {
         const itemId = req.params.id;
         const result = await pool.query('SELECT * FROM item_prices WHERE item_id = $1 ORDER BY recorded_at DESC LIMIT 1', [itemId]);
         if (result.rows.length === 0) return res.status(404).send("Item not found.");
         const item = result.rows[0];
+
+        // Fix for undefined description
+        const itemDesc = (item.description && item.description !== 'undefined') ? item.description : 'No description available for this archived asset.';
 
         res.send(`
             <html>
@@ -65,27 +72,25 @@ app.get('/store/:id', async (req, res) => {
                     body { font-family: 'Inter', sans-serif; background: #0d0d0d; color: #fff; margin: 0; padding: 20px; }
                     .wrapper { max-width: 600px; margin: 40px auto; }
                     .header-img { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 40px; text-align: center; margin-bottom: 20px; }
-                    .header-img img { width: 100%; max-width: 300px; }
+                    .header-img img { width: 100%; max-width: 300px; border-radius: 8px; }
+                    .off-sale-banner { background: rgba(255, 68, 68, 0.1); border: 1px solid #ff4444; color: #ff4444; padding: 12px; border-radius: 8px; text-align: center; font-weight: 800; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
                     .info-section { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 25px; margin-bottom: 15px; }
                     .label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; }
-                    .value { font-size: 24px; font-weight: 700; }
-                    .btn-polytoria { display: block; text-align: center; background: #222; color: #fff; text-decoration: none; padding: 15px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; border: 1px solid #333; }
-                    .offline-banner { background: #ff444422; border: 1px solid #ff4444; color: #ff4444; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 20px; }
+                    .value { font-size: 22px; font-weight: 700; }
+                    .btn-polytoria { display: block; text-align: center; background: #222; color: #fff; text-decoration: none; padding: 15px; border-radius: 8px; font-weight: bold; margin-bottom: 20px; border: 1px solid #333; }
                 </style>
             </head>
             <body>
                 <div class="wrapper">
-                    <div class="header-img">
-                        <img src="${item.thumbnail}">
-                    </div>
-                    <div class="offline-banner">OFFLINE ITEM</div>
+                    <div class="header-img"><img src="${item.thumbnail}"></div>
+                    <div class="off-sale-banner">Off-Sale Item</div>
                     <h1 style="margin: 0 0 5px 0;">${item.name}</h1>
-                    <p style="color: #666; margin-bottom: 25px;">${item.description}</p>
+                    <p style="color: #888; margin-bottom: 30px; line-height: 1.5;">${itemDesc}</p>
                     
                     <a href="https://polytoria.com/store/${item.item_id}" class="btn-polytoria">View on Polytoria</a>
                     
                     <div class="info-section">
-                        <div class="label">Original Price</div>
+                        <div class="label">Last Known Price</div>
                         <div class="value">${item.price.toLocaleString()} Bricks</div>
                     </div>
                     
@@ -94,7 +99,7 @@ app.get('/store/:id', async (req, res) => {
                         <div class="value">#${item.item_id}</div>
                     </div>
 
-                    <a href="/" style="display:block; text-align:center; color:#444; text-decoration:none; margin-top:20px;">← Back to Archive</a>
+                    <a href="/" style="display:block; text-align:center; color:#555; text-decoration:none; margin-top:30px; font-size: 14px;">← Back to Collection</a>
                 </div>
             </body>
             </html>
@@ -109,7 +114,7 @@ app.post('/internal/save', async (req, res) => {
         for (let item of items) {
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, thumbnail, description) VALUES ($1, $2, $3, $4, $5)',
-                [item.id || item.assetId, item.name, item.price || 0, item.thumbnail || '', item.description || 'A look as old as time.']
+                [item.id || item.assetId, item.name, item.price || 0, item.thumbnail || '', item.description]
             );
         }
         res.send("Sync successful! <a href='/'>Go Home</a>");
