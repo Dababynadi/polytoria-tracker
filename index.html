@@ -1,79 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Market Tracker</title>
     <style>
-        body { font-family: 'Inter', sans-serif; background: #0b0b0b; color: #efefef; margin: 0; padding: 0; }
-        .hero { background: #161616; padding: 60px 20px; text-align: center; border-bottom: 1px solid #2a2a2a; }
-        .hero h1 { margin: 0; font-size: 32px; font-weight: 800; }
-        .filter-bar { max-width: 1200px; margin: 20px auto; padding: 0 20px; display: flex; gap: 10px; justify-content: center; }
-        .filter-btn { background: #161616; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-        .filter-btn.active { background: #007bff; color: white; border-color: #007bff; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
-        .card { background: #161616; padding: 20px; border-radius: 12px; border: 1px solid #2a2a2a; text-align: center; text-decoration: none; color: inherit; transition: 0.2s; }
-        .card:hover { border-color: #007bff; transform: translateY(-5px); }
-        .card img { width: 140px; height: 140px; object-fit: contain; margin-bottom: 15px; }
-        .name { font-weight: 700; font-size: 15px; margin-bottom: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .price { color: #2ecc71; font-weight: bold; font-size: 17px; }
-        .limited-tag { font-size: 10px; color: #f1c40f; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; display: none; }
-        .card.is-limited .limited-tag { display: block; }
-        #error-msg { text-align: center; color: #ff4444; margin: 20px; display: none; }
+        body { font-family: sans-serif; background: #0b0b0b; color: white; text-align: center; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px; }
+        .card { background: #161616; padding: 15px; border-radius: 10px; border: 1px solid #333; text-decoration: none; color: white; }
+        .card:hover { border-color: #007bff; }
+        .filter-btn { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        .active { background: #007bff; color: white; }
     </style>
 </head>
 <body>
-    <div class="hero">
-        <h1>Market Tracker</h1>
+    <h1>Market Tracker</h1>
+    <div>
+        <button id="btnAll" class="active" onclick="load('all')">All</button>
+        <button id="btnLim" onclick="load('limited')">Limiteds</button>
     </div>
-
-    <div class="filter-bar">
-        <button class="filter-btn active" id="btn-all" onclick="load('all')">All Items</button>
-        <button class="filter-btn" id="btn-lim" onclick="load('limited')">Limiteds</button>
-    </div>
-
-    <div id="error-msg">Error loading data. Check the console or sync your data.</div>
-
-    <div class="container">
-        <div class="grid" id="market-grid"></div>
-    </div>
+    <div class="grid" id="grid"></div>
 
     <script>
-        async function load(type) {
-            // Update buttons
-            document.getElementById('btn-all').classList.toggle('active', type === 'all');
-            document.getElementById('btn-lim').classList.toggle('active', type === 'limited');
-
-            const grid = document.getElementById('market-grid');
-            const errorMsg = document.getElementById('error-msg');
+        async function load(mode) {
+            document.getElementById('btnAll').className = mode === 'all' ? 'active' : '';
+            document.getElementById('btnLim').className = mode === 'limited' ? 'active' : '';
             
-            try {
-                const url = type === 'limited' ? '/api/prices?limited=true' : '/api/prices';
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('API request failed');
-                
-                const data = await res.json();
-                
-                if (data.length === 0) {
-                    grid.innerHTML = "<p style='grid-column: 1/-1; text-align:center; color:#666;'>No items found. Go to /internal/update to sync data.</p>";
-                    return;
-                }
-
-                errorMsg.style.display = 'none';
-                grid.innerHTML = data.map(item => `
-                    <a href="/store/${item.item_id}" class="card ${item.is_limited ? 'is-limited' : ''}">
-                        <span class="limited-tag">Limited</span>
-                        <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
-                        <div class="name">${item.name}</div>
-                        <div class="price">${(item.price || 0).toLocaleString()} Bricks</div>
-                        <div style="font-size:11px; color:#666; margin-top:5px;">RAP: ${(item.rap || 0).toLocaleString()}</div>
-                    </a>
-                `).join('');
-            } catch (e) {
-                console.error("Load Error:", e);
-                errorMsg.style.display = 'block';
-                errorMsg.innerText = "Error: " + e.message;
+            const res = await fetch(mode === 'limited' ? '/api/prices?limited=true' : '/api/prices');
+            const data = await res.json();
+            const grid = document.getElementById('grid');
+            
+            if (data.length === 0) {
+                grid.innerHTML = "<p>No data. Sync at /internal/update</p>";
+                return;
             }
+
+            grid.innerHTML = data.map(i => `
+                <a href="/store/${i.item_id}" class="card">
+                    <img src="${i.thumbnail}" width="100">
+                    <div>${i.name}</div>
+                    <div style="color:#2ecc71">${i.price} Bricks</div>
+                </a>
+            `).join('');
         }
         load('all');
     </script>
