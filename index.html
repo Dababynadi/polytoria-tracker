@@ -4,29 +4,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Market Catalog</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f9; padding: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        body { font-family: sans-serif; background: #f4f7f9; padding: 20px; margin: 0; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: auto; }
         .card { background: white; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #ddd; text-decoration: none; color: inherit; transition: 0.2s; }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #007bff; }
         .card img { width: 120px; height: 120px; object-fit: contain; margin-bottom: 10px; }
-        .name { font-weight: bold; margin-bottom: 5px; }
+        .name { font-weight: bold; margin-bottom: 5px; color: #333; }
         .price { color: #27ae60; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>Market Tracker</h1>
+    <h1 style="text-align:center; color:#2c3e50;">Market Catalog</h1>
     <div class="grid" id="market-grid"></div>
     <script>
         async function load() {
-            const res = await fetch('/api/prices');
-            const data = await res.json();
-            document.getElementById('market-grid').innerHTML = data.map(item => `
-                <a href="/store/${item.item_id}" class="card">
-                    <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
-                    <div class="name">${item.name}</div>
-                    <div class="price">${item.price.toLocaleString()} Bricks</div>
-                </a>
-            `).join('');
+            try {
+                const res = await fetch('/api/prices');
+                const data = await res.json();
+                document.getElementById('market-grid').innerHTML = data.map(item => `
+                    <a href="/store/${item.item_id}" class="card">
+                        <img src="${item.thumbnail}" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
+                        <div class="name">${item.name}</div>
+                        <div class="price">${item.price.toLocaleString()} Bricks</div>
+                    </a>
+                `).join('');
+            } catch (e) { console.log(e); }
         }
         load();
     </script>
