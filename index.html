@@ -3,87 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polytoria Market Tracker</title>
+    <title>Market Tracker</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f9; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 1100px; margin: auto; }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
-        
-        .card { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
-            border: 1px solid #e1e8ed; 
-            text-align: center; 
-            transition: transform 0.2s;
-        }
-        .card:hover { transform: translateY(-5px); }
-        
-        .item-img { 
-            width: 120px; 
-            height: 120px; 
-            border-radius: 10px; 
-            background: #f8f9fa; 
-            margin-bottom: 15px; 
-            object-fit: contain; 
-        }
-        
-        .card h3 { margin: 10px 0; font-size: 1.1em; color: #34495e; height: 2.4em; overflow: hidden; }
-        .price { font-weight: bold; color: #27ae60; font-size: 1.2em; }
-        .rap { color: #7f8c8d; font-size: 0.9em; margin: 5px 0 15px 0; }
-        
-        .view-btn { 
-            display: block; 
-            padding: 10px; 
-            background: #007bff; 
-            color: white; 
-            text-decoration: none; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            font-size: 0.9em;
-        }
-        .view-btn:hover { background: #0056b3; }
-        
-        #status { text-align: center; margin-top: 50px; font-style: italic; color: #95a5a6; }
+        body { font-family: sans-serif; background: #f4f7f9; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 15px; border-radius: 12px; border: 1px solid #ddd; text-align: center; }
+        .item-img { width: 100px; height: 100px; object-fit: contain; }
+        .view-btn { display: block; margin-top: 10px; padding: 10px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Polytoria Market Tracker</h1>
-        <div id="status">Checking database...</div>
-        <div class="grid" id="market-grid"></div>
-    </div>
+    <h1>Market Tracker</h1>
+    <div class="grid" id="market-grid"></div>
 
     <script>
-        async function loadPrices() {
-            try {
-                const response = await fetch('/api/prices');
-                const data = await response.json();
-                const grid = document.getElementById('market-grid');
-                const status = document.getElementById('status');
-
-                if (data.length === 0) {
-                    status.innerHTML = 'No data yet. <a href="/internal/update">Click here to sync market data</a>.';
-                    return;
-                }
-
-                status.style.display = 'none';
-                grid.innerHTML = data.map(item => `
-                    <div class="card">
-                        <img src="${item.thumbnail}" class="item-img" onerror="this.src='https://polytoria.com/assets/img/icon.png'">
-                        <h3>${item.name}</h3>
-                        <div class="price">${item.price.toLocaleString()} Bricks</div>
-                        <div class="rap">RAP: ${item.rap.toLocaleString()}</div>
-                        <a href="https://polytoria.com/store/${item.item_id}" target="_blank" class="view-btn">View Item</a>
-                    </div>
-                `).join('');
-            } catch (err) {
-                document.getElementById('status').innerText = 'Error: ' + err.message;
-            }
+        async function load() {
+            const res = await fetch('/api/prices');
+            const data = await res.json();
+            const grid = document.getElementById('market-grid');
+            grid.innerHTML = data.map(item => `
+                <div class="card">
+                    <img src="${item.thumbnail}" class="item-img">
+                    <h3>${item.name}</h3>
+                    <p>Price: ${item.price}</p>
+                    <a href="https://polytoria.com/store/${item.item_id}" target="_blank" class="view-btn">View</a>
+                </div>
+            `).join('');
         }
-        loadPrices();
+        load();
     </script>
 </body>
 </html>
