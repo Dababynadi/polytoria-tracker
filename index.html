@@ -2,85 +2,68 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Archive</title>
+    <title>Polytoria Market Tracker</title>
     <style>
-        body { font-family: sans-serif; background: #080808; color: #efefef; margin: 0; padding: 0; }
-        .nav { background: #111; padding: 25px; text-align: center; border-bottom: 1px solid #222; }
-        .nav h1 { margin: 0; font-size: 24px; letter-spacing: -1px; }
-
-        .search-container { max-width: 600px; margin: 30px auto; padding: 0 20px; }
-        #search-input { width: 100%; padding: 18px; border-radius: 12px; border: 1px solid #222; background: #141414; color: white; font-size: 16px; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0b0b0b; color: #efefef; margin: 0; padding: 0; }
+        .hero { background: #161616; padding: 60px 20px; text-align: center; border-bottom: 1px solid #2a2a2a; }
+        .hero h1 { margin: 0; font-size: 32px; font-weight: 800; }
         
-        .filters { display: flex; justify-content: center; gap: 10px; margin-bottom: 40px; }
-        .btn { background: #141414; border: 1px solid #222; color: #666; padding: 12px 25px; border-radius: 30px; cursor: pointer; font-weight: bold; }
-        .btn.active { background: #fff; color: #000; border-color: #fff; }
+        /* Filter Bar */
+        .filter-bar { max-width: 1200px; margin: 20px auto; padding: 0 20px; display: flex; gap: 10px; justify-content: center; }
+        .filter-btn { background: #161616; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .filter-btn.active { background: #007bff; color: white; border-color: #007bff; }
+        .filter-btn:hover { border-color: #555; }
 
-        .container { max-width: 1200px; margin: auto; padding: 0 20px 100px 20px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
-        
         .card { 
-            background: #111; border: 1px solid #222; border-radius: 16px; padding: 20px; 
-            text-align: center; text-decoration: none; color: inherit; transition: 0.2s;
+            background: #161616; padding: 20px; border-radius: 12px; border: 1px solid #2a2a2a; 
+            text-align: center; text-decoration: none; color: inherit; transition: 0.2s; 
         }
-        .card:hover { border-color: #444; transform: translateY(-5px); background: #161616; }
-        .card img { width: 100%; border-radius: 10px; margin-bottom: 15px; filter: grayscale(0.3); }
-        .card .name { font-weight: bold; display: block; margin-bottom: 5px; }
-        .card .id-tag { font-size: 11px; color: #444; font-family: monospace; }
-        
-        .offline-badge { font-size: 10px; color: #ff4444; border: 1px solid #ff4444; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; margin-bottom: 10px; display: inline-block; }
+        .card:hover { border-color: #007bff; transform: translateY(-5px); }
+        .card img { width: 140px; height: 140px; object-fit: contain; margin-bottom: 15px; }
+        .name { font-weight: 700; font-size: 15px; margin-bottom: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .price { color: #2ecc71; font-weight: bold; font-size: 17px; }
+        .limited-tag { font-size: 10px; color: #f1c40f; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; visibility: hidden; }
+        .card.is-limited .limited-tag { visibility: visible; }
     </style>
 </head>
 <body>
-
-    <div class="nav">
-        <h1>ASSET<span>ARCHIVE</span></h1>
+    <div class="hero">
+        <h1>Market Tracker</h1>
+        <p>Advanced item values and analytics.</p>
     </div>
 
-    <div class="search-container">
-        <input type="text" id="search-input" placeholder="Find offline items..." oninput="handleSearch()">
-    </div>
-
-    <div class="filters">
-        <button class="btn active" id="btn-all" onclick="setMode('all')">All Assets</button>
-        <button class="btn" id="btn-lim" onclick="setMode('limited')">Legacy Limiteds</button>
+    <div class="filter-bar">
+        <button class="filter-btn active" onclick="load('all', this)">All Items</button>
+        <button class="filter-btn" onclick="load('limited', this)">Limiteds Only</button>
     </div>
 
     <div class="container">
-        <div class="grid" id="asset-grid"></div>
+        <div class="grid" id="market-grid"></div>
     </div>
 
     <script>
-        let mode = 'all';
-        let timer;
+        async function load(type, btn) {
+            // Update UI buttons
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            if(btn) btn.classList.add('active');
 
-        function setMode(m) {
-            mode = m;
-            document.getElementById('btn-all').classList.toggle('active', m === 'all');
-            document.getElementById('btn-lim').classList.toggle('active', m === 'limited');
-            fetchItems();
-        }
-
-        function handleSearch() {
-            clearTimeout(timer);
-            timer = setTimeout(fetchItems, 300);
-        }
-
-        async function fetchItems() {
-            const search = document.getElementById('search-input').value;
-            const res = await fetch(`/api/items?limited=${mode === 'limited'}&search=${encodeURIComponent(search)}`);
+            const url = type === 'limited' ? '/api/prices?limited=true' : '/api/prices';
+            const res = await fetch(url);
             const data = await res.json();
             
-            document.getElementById('asset-grid').innerHTML = data.map(i => `
-                <a href="/view/${i.item_id}" class="card">
-                    <div class="offline-badge">Offline</div>
-                    <img src="${i.thumbnail}">
-                    <span class="name">${i.name}</span>
-                    <span class="id-tag">#${i.item_id}</span>
+            document.getElementById('market-grid').innerHTML = data.map(item => `
+                <a href="/store/${item.item_id}" class="card ${item.rap > 0 || item.is_limited ? 'is-limited' : ''}">
+                    <span class="limited-tag">Limited</span>
+                    <img src="${item.thumbnail}">
+                    <div class="name">${item.name}</div>
+                    <div class="price">${item.price.toLocaleString()} Bricks</div>
+                    <div style="font-size:11px; color:#666; margin-top:5px;">RAP: ${item.rap.toLocaleString()}</div>
                 </a>
             `).join('');
         }
-        
-        fetchItems();
+        load('all');
     </script>
 </body>
 </html>
