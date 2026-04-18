@@ -23,7 +23,7 @@ async function initDb() {
             );
         `);
         await pool.query(`ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS is_limited BOOLEAN DEFAULT FALSE;`).catch(() => {});
-    } catch (err) { console.log("Database initialized."); }
+    } catch (err) { console.log("DB Ready"); }
 }
 initDb();
 
@@ -33,7 +33,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Advanced API with Search and Limited Filtering
+// FIXED API: Explicitly filters by RAP or the is_limited flag
 app.get('/api/prices', async (req, res) => {
     try {
         const onlyLimited = req.query.limited === 'true';
@@ -48,6 +48,7 @@ app.get('/api/prices', async (req, res) => {
         
         const params = [];
         if (onlyLimited) {
+            // A limited is defined as having RAP > 0 OR being manually flagged
             query += ` AND (t1.rap > 0 OR t1.is_limited = TRUE)`;
         }
         if (search) {
@@ -55,7 +56,7 @@ app.get('/api/prices', async (req, res) => {
             query += ` AND LOWER(t1.name) LIKE $${params.length}`;
         }
         
-        query += ` ORDER BY t1.recorded_at DESC LIMIT 100`;
+        query += ` ORDER BY t1.recorded_at DESC`;
         
         const result = await pool.query(query, params);
         res.json(result.rows);
@@ -65,6 +66,7 @@ app.get('/api/prices', async (req, res) => {
     }
 });
 
+// Individual Item Page
 app.get('/store/:id', async (req, res) => {
     try {
         const itemId = req.params.id;
@@ -81,49 +83,38 @@ app.get('/store/:id', async (req, res) => {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
                 <style>
-                    body { font-family: 'Inter', sans-serif; background: #0d0d0d; color: #fff; margin: 0; padding: 20px; }
-                    .wrapper { max-width: 1100px; margin: 40px auto; }
-                    .main-card { background: #141414; border: 1px solid #222; border-radius: 16px; display: flex; flex-wrap: wrap; gap: 40px; padding: 40px; }
-                    .item-view { flex: 1; text-align: center; }
-                    .item-view img { width: 100%; max-width: 300px; background: #1a1a1a; border-radius: 12px; padding: 20px; border: 1px solid #282828; }
-                    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 25px 0; }
-                    .stat-box { background: #1a1a1a; border: 1px solid #282828; padding: 20px; border-radius: 12px; }
-                    .stat-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; }
-                    .stat-value { font-size: 22px; font-weight: 700; margin-top: 5px; }
-                    .btn-main { display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 18px; border-radius: 10px; font-weight: bold; }
-                    .chart-section { background: #141414; border: 1px solid #222; border-radius: 16px; padding: 30px; margin-top: 30px; }
+                    body { font-family: sans-serif; background: #0b0b0b; color: #eee; margin: 0; padding: 20px; }
+                    .container { max-width: 900px; margin: auto; }
+                    .card { background: #161616; border: 1px solid #2a2a2a; border-radius: 12px; padding: 25px; margin-bottom: 20px; }
+                    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+                    .stat-box { background: #111; padding: 15px; border-radius: 8px; border: 1px solid #222; }
+                    .label { font-size: 11px; color: #666; font-weight: bold; text-transform: uppercase; }
+                    .value { font-size: 20px; font-weight: bold; margin-top: 5px; }
                 </style>
             </head>
             <body>
-                <div class="wrapper">
-                    <div class="main-card">
-                        <div class="item-view">
-                            <img src="${latest.thumbnail}">
-                            <h1 style="font-size: 32px; margin: 25px 0 10px 0;">${latest.name}</h1>
-                            <div style="color: #666; font-size: 14px;">Asset ID: #${latest.item_id}</div>
-                        </div>
-                        <div style="flex: 1.5;">
-                            <div class="stat-grid">
-                                <div class="stat-box"><div class="stat-label">Value</div><div class="stat-value" style="color:#2ecc71;">${latest.price.toLocaleString()}</div></div>
-                                <div class="stat-box"><div class="stat-label">RAP</div><div class="stat-value">${latest.rap.toLocaleString()}</div></div>
-                            </div>
-                            <a href="https://polytoria.com/store/${latest.item_id}" class="btn-main">View on Polytoria</a>
-                            <a href="/" style="display:block; text-align:center; margin-top:20px; color:#555; text-decoration:none;">← Back</a>
-                        </div>
+                <div class="container">
+                    <div class="card" style="text-align:center;">
+                        <img src="${latest.thumbnail}" width="200">
+                        <h1>${latest.name}</h1>
+                        <p style="color:#555">ID: #${latest.item_id}</p>
                     </div>
-                    <div class="chart-section">
-                        <canvas id="itemChart" height="120"></canvas>
+                    <div class="stat-grid">
+                        <div class="stat-box"><div class="label">Price</div><div class="value" style="color:#2ecc71">${latest.price.toLocaleString()}</div></div>
+                        <div class="stat-box"><div class="label">RAP</div><div class="value">${latest.rap.toLocaleString()}</div></div>
                     </div>
+                    <div class="card" style="margin-top:20px;">
+                        <canvas id="myChart"></canvas>
+                    </div>
+                    <a href="/" style="color:#666; text-decoration:none; display:block; text-align:center; margin-top:20px;">← Back</a>
                 </div>
                 <script>
-                    const ctx = document.getElementById('itemChart').getContext('2d');
-                    new Chart(ctx, {
+                    new Chart(document.getElementById('myChart'), {
                         type: 'line',
                         data: {
                             labels: ${JSON.stringify(chartLabels)},
-                            datasets: [{ label: 'RAP', data: ${JSON.stringify(chartData)}, borderColor: '#007bff', fill: true, tension: 0.4 }]
-                        },
-                        options: { plugins: { legend: { display: false } } }
+                            datasets: [{ label: 'RAP', data: ${JSON.stringify(chartData)}, borderColor: '#007bff', tension: 0.3, fill: true }]
+                        }
                     });
                 </script>
             </body>
@@ -134,10 +125,10 @@ app.get('/store/:id', async (req, res) => {
 
 app.get('/internal/update', (req, res) => {
     res.send(`
-        <body style="background:#0d0d0d; color:white; font-family:sans-serif; text-align:center; padding:50px;">
+        <body style="background:#0b0b0b; color:white; text-align:center; padding:50px;">
             <form action="/internal/save" method="POST">
-                <textarea name="data" rows="10" style="width:80%; background:#141414; color:white; border:1px solid #333; padding:15px;"></textarea><br>
-                <button type="submit" style="padding:15px 40px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">Sync Data</button>
+                <textarea name="data" rows="10" style="width:80%; background:#161616; color:white; border:1px solid #333;"></textarea><br>
+                <button type="submit" style="padding:10px 30px; margin-top:10px;">Sync Items</button>
             </form>
         </body>
     `);
@@ -148,15 +139,13 @@ app.post('/internal/save', async (req, res) => {
         const rawData = JSON.parse(req.body.data);
         const items = rawData.items || rawData.assets || rawData.data || (Array.isArray(rawData) ? rawData : []);
         for (let item of items) {
-            const itemId = item.id || item.assetId || 0;
-            const thumb = item.thumbnail || `https://c0.ptacdn.com/thumbnails/assets/${itemId}-icon.png`;
-            const isLim = item.rap > 0 || item.isLimited === true;
+            const isLim = (item.rap > 0) || (item.isLimited === true);
             await pool.query(
                 'INSERT INTO item_prices (item_id, name, price, rap, thumbnail, is_limited) VALUES ($1, $2, $3, $4, $5, $6)',
-                [itemId, item.name || 'Unknown', item.price || 0, item.rap || 0, thumb, isLim]
+                [item.id || item.assetId, item.name, item.price || 0, item.rap || 0, item.thumbnail || '', isLim]
             );
         }
-        res.send("Sync successful! <a href='/'>Go Home</a>");
+        res.send("Sync Complete. <a href='/'>Home</a>");
     } catch (err) { res.send("Error: " + err.message); }
 });
 
