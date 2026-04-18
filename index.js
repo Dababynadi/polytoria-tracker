@@ -8,9 +8,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Database Setup
+// Database Setup: Includes the 'thumbnail' column now
 async function initDb() {
     try {
+        // Create table if it doesn't exist
         await pool.query(`
             CREATE TABLE IF NOT EXISTS item_prices (
                 id SERIAL PRIMARY KEY,
@@ -18,10 +19,17 @@ async function initDb() {
                 name TEXT,
                 price INT,
                 rap INT,
+                thumbnail TEXT,
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("Database table is ready.");
+        
+        // Add thumbnail column if it's missing (for existing users)
+        await pool.query(`
+            ALTER TABLE item_prices ADD COLUMN IF NOT EXISTS thumbnail TEXT;
+        `);
+        
+        console.log("Database table is ready with thumbnails.");
     } catch (err) {
         console.error("Database init error:", err);
     }
@@ -34,17 +42,17 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API for the frontend to show the charts/cards
+// API for the frontend
 app.get('/api/prices', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM item_prices ORDER BY recorded_at DESC LIMIT 60');
+        const result = await pool.query('SELECT * FROM item_prices ORDER BY recorded_at DESC LIMIT 100');
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// The Manual Sync Interface
+// Manual Sync Page
 app.get('/internal/update', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -61,7 +69,7 @@ app.get('/internal/update', (req, res) => {
         <body>
             <div class="box">
                 <h2>Market Manual Sync</h2>
-                <p>Paste the "Response Body" from the Polytoria API below:</p>
+                <p>Paste the "Response Body" from Polytoria below:</p>
                 <form action="/internal/save" method="POST">
                     <textarea name="data" rows="10" placeholder='{"success":true...}'></textarea>
                     <button type="submit">Update Database</button>
@@ -72,31 +80,31 @@ app.get('/internal/update', (req, res) => {
     `);
 });
 
-// The Saving Logic
+// Enhanced Saving Logic with Images
 app.post('/internal/save', async (req, res) => {
     try {
         const rawData = JSON.parse(req.body.data);
-        
-        // Universal detection: looks for the list under any common name
         const items = rawData.items || rawData.assets || rawData.data || (Array.isArray(rawData) ? rawData : []);
         
         if (items.length === 0) {
-            return res.send("<b>Error:</b> No items found in the data you pasted. Make sure you copied the whole response.");
+            return res.send("<b>Error:</b> No items found.");
         }
 
         for (let item of items) {
-            // Flexible property names to handle API updates
             const itemId = item.id || item.assetId || 0;
             const itemName = item.name || item.assetName || 'Unknown Item';
             const itemPrice = item.price || item.value || 0;
-            const itemRap = item.rap || item.avgPrice || item.averagePrice || 0;
+            const itemRap = item.rap || item.avgPrice || 0;
+            
+            // Try to find the thumbnail in the data, or build the fallback link
+            const itemThumb = item.thumbnail || item.iconUrl || \`https://c0.ptacdn.com/thumbnails/assets/\${itemId}-icon.png\`;
 
             await pool.query(
-                'INSERT INTO item_prices (item_id, name, price, rap) VALUES ($1, $2, $3, $4)',
-                [itemId, itemName, itemPrice, itemRap]
+                'INSERT INTO item_prices (item_id, name, price, rap, thumbnail) VALUES ($1, $2, $3, $4, $5)',
+                [itemId, itemName, itemPrice, itemRap, itemThumb]
             );
         }
-        res.send(`Successfully saved ${items.length} items! <a href="/">Go to Home</a>`);
+        res.send(\`Successfully saved \${items.length} items with images! <a href="/">Go to Home</a>\`);
     } catch (err) {
         res.status(500).send("<b>Sync Error:</b> " + err.message);
     }
