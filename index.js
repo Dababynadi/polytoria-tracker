@@ -9,6 +9,26 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// AUTO-SETUP: Creates the table if it doesn't exist
+async function initDb() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS item_prices (
+                id SERIAL PRIMARY KEY,
+                item_id INT,
+                name TEXT,
+                price INT,
+                rap INT,
+                recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("Database table is ready.");
+    } catch (err) {
+        console.error("Database init error:", err);
+    }
+}
+initDb();
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -32,9 +52,9 @@ app.get('/internal/update', async (req, res) => {
                 [item.id, item.name, item.price, item.rap]
             );
         }
-        res.send("Update successful");
+        res.send("Update successful! Prices saved to database.");
     } catch (err) {
-        res.status(500).send("Update failed");
+        res.status(500).send("Update failed: " + err.message);
     }
 });
 
